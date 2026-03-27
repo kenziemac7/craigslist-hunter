@@ -1,0 +1,59 @@
+name: Daily Zillow Hunt
+
+on:
+  schedule:
+    - cron: '0 14 * * *'  # 7am PT (UTC-7) every day
+  workflow_dispatch:        # allow manual runs from the GitHub UI
+
+jobs:
+  hunt:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Invoke zillow-hunter function
+        env:
+          BROWSERBASE_API_KEY: ${{ secrets.BROWSERBASE_API_KEY }}
+          FUNCTION_ID: ${{ secrets.BROWSERBASE_FUNCTION_ID }}
+        run: |
+          echo "🏠 Starting Zillow hunt..."
+
+          # Kick off the function invocation
+          RESPONSE=$(curl -s -X POST \
+            "https://api.browserbase.com/v1/functions/${FUNCTION_ID}/invoke" \
+            -H "Content-Type: application/json" \
+            -H "x-bb-api-key: ${BROWSERBASE_API_KEY}" \
+            -d '{"params": {}}')
+
+          INVOCATION_ID=$(echo "$RESPONSE" | jq -r '.id')
+          echo "Invocation ID: $INVOCATION_ID"
+
+          if [ -z "$INVOCATION_ID" ] || [ "$INVOCATION_ID" = "null" ]; then
+            echo "❌ Failed to start invocation:"
+            echo "$RESPONSE"
+            exit 1
+          fi
+
+          # Poll every 15s, give up after 10 minutes
+          for i in $(seq 1 40); do
+            sleep 15
+
+            RESULT=$(curl -s \
+              "https://api.browserbase.com/v1/functions/invocations/${INVOCATION_ID}" \
+              -H "x-bb-api-key: ${BROWSERBASE_API_KEY}")
+
+            STATUS=$(echo "$RESULT" | jq -r '.status')
+            echo "Poll ${i}: status = ${STATUS}"
+
+            if [ "$STATUS" = "COMPLETED" ]; then
+              echo "✅ Done!"
+              echo "$RESULT" | jq '.results'
+              exit 0
+            elif [ "$STATUS" = "FAILED" ]; then
+              echo "❌ Function failed:"
+              echo "$RESULT" | jq '.error'
+              exit 1
+            fi
+          done
+
+          echo "⏱ Timed out after 10 minutes"
+          exit 1
