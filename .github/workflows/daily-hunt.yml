@@ -2,7 +2,7 @@ name: Daily Zillow Hunt
 
 on:
   schedule:
-    - cron: '0 14 * * *'  # 7am PT (UTC-7) every day
+    - cron: '0 2,14 * * *'  # 7am and 7pm PT (UTC-7) every day
   workflow_dispatch:        # allow manual runs from the GitHub UI
 
 jobs:
