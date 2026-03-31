@@ -10,7 +10,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Invoke zillow-hunter function
+      - name: Invoke craigslist-hunter function
         env:
           BROWSERBASE_API_KEY: ${{ secrets.BROWSERBASE_API_KEY }}
           FUNCTION_ID: ${{ secrets.BROWSERBASE_FUNCTION_ID }}

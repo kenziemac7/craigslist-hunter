@@ -15,12 +15,12 @@ type Listing = {
 };
 
 type Params = {
-  zipcode?:   string;  // search center zip code,  default "94117" (NOPA / Lower Haight)
-  radius?:    number;  // miles from zip code,      default 1.5
-  minBeds?:   number;  // minimum bedrooms,         default 2
-  maxPrice?:  number;  // monthly rent ceiling,     default 6000
-  parking?:   boolean; // require off-street parking, default false
-  recipient?: string;  // override RECIPIENT_EMAIL env var
+  zipcode?: string; // search center zip code,  default "94117" (NOPA / Lower Haight)
+  radius?: number; // miles from zip code,      default 1.5
+  minBeds?: number; // minimum bedrooms,         default 2
+  maxPrice?: number; // monthly rent ceiling,     default 6000
+  parking?: boolean; // require off-street parking, default false
+  recipient?: string; // override RECIPIENT_EMAIL env var
 };
 
 // --- Geo helpers ---
@@ -30,11 +30,11 @@ const ZIP_COORDS: Record<string, [number, number]> = {
   "94102": [37.7794, -122.4194], // Civic Center / Tenderloin
   "94103": [37.7726, -122.4124], // SoMa
   "94107": [37.7576, -122.3946], // Potrero Hill / Mission Bay
-  "94109": [37.7940, -122.4215], // Russian Hill / Nob Hill
-  "94110": [37.7490, -122.4151], // Mission
-  "94114": [37.7598, -122.4350], // Castro
-  "94115": [37.7853, -122.4360], // Western Addition / Fillmore
-  "94117": [37.7698, -122.4470], // NOPA / Lower Haight / Haight
+  "94109": [37.794, -122.4215], // Russian Hill / Nob Hill
+  "94110": [37.749, -122.4151], // Mission
+  "94114": [37.7598, -122.435], // Castro
+  "94115": [37.7853, -122.436], // Western Addition / Fillmore
+  "94117": [37.7698, -122.447], // NOPA / Lower Haight / Haight
   "94118": [37.7816, -122.4625], // Inner Richmond
   "94121": [37.7786, -122.4939], // Outer Richmond
   "94122": [37.7606, -122.4855], // Inner Sunset
@@ -43,30 +43,32 @@ const ZIP_COORDS: Record<string, [number, number]> = {
 };
 
 function haversinemiles(
-  lat1: number, lon1: number,
-  lat2: number, lon2: number,
+  lat1: number,
+  lon1: number,
+  lat2: number,
+  lon2: number,
 ): number {
-  const R  = 3958.8; // Earth radius in miles
+  const R = 3958.8; // Earth radius in miles
   const dLat = ((lat2 - lat1) * Math.PI) / 180;
   const dLon = ((lon2 - lon1) * Math.PI) / 180;
   const a =
     Math.sin(dLat / 2) ** 2 +
     Math.cos((lat1 * Math.PI) / 180) *
-    Math.cos((lat2 * Math.PI) / 180) *
-    Math.sin(dLon / 2) ** 2;
+      Math.cos((lat2 * Math.PI) / 180) *
+      Math.sin(dLon / 2) ** 2;
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
 // --- Function ---
 
-defineFn("zillow-hunter", async (context, rawParams) => {
+defineFn("craigslist-hunter", async (ctx, rawParams) => {
   const params = (rawParams ?? {}) as Params;
 
-  const zipcode   = params.zipcode   ?? "94117";
-  const radius    = params.radius    ?? 1.5;
-  const minBeds   = params.minBeds   ?? 2;
-  const maxPrice  = params.maxPrice  ?? 6000;
-  const parking   = params.parking   ?? false;
+  const zipcode = params.zipcode ?? "94117";
+  const radius = params.radius ?? 1.5;
+  const minBeds = params.minBeds ?? 2;
+  const maxPrice = params.maxPrice ?? 6000;
+  const parking = params.parking ?? false;
   const recipient = params.recipient ?? process.env["RECIPIENT_EMAIL"] ?? "";
 
   // Craigslist SF apartments — newest first
@@ -77,8 +79,8 @@ defineFn("zillow-hunter", async (context, rawParams) => {
     `${parking ? "&parking=1" : ""}&sort=date`;
 
   // 1. Connect to the Browserbase browser session
-  console.log("Connecting to session:", context.session.id);
-  const browser = await chromium.connectOverCDP(context.session.connectUrl);
+  console.log("Connecting to session:", ctx.session.id);
+  const browser = await chromium.connectOverCDP(ctx.session.connectUrl);
   const page = browser.contexts()[0]!.pages()[0]!;
 
   // 2. Navigate to Craigslist with filters applied
@@ -94,14 +96,14 @@ defineFn("zillow-hunter", async (context, rawParams) => {
 
     document.querySelectorAll("div[data-pid]").forEach((item) => {
       const anchor = item.querySelector<HTMLAnchorElement>("a.cl-app-anchor");
-      const title  = item.querySelector(".label")?.textContent?.trim() ?? "";
-      const price  = item.querySelector(".priceinfo")?.textContent?.trim() ?? "";
-      const url    = anchor?.href ?? "";
+      const title = item.querySelector(".label")?.textContent?.trim() ?? "";
+      const price = item.querySelector(".priceinfo")?.textContent?.trim() ?? "";
+      const url = anchor?.href ?? "";
 
       // meta text looks like: "<1hr ago2br787ft2Mid-Market" or "3h ago2bralamo square / nopa"
       // split on the bedroom count to isolate the posted-time and neighborhood
-      const meta   = item.querySelector(".meta")?.textContent?.trim() ?? "";
-      const parts  = meta.match(/^(.*?)(\d+br)((?:\d+ft2)?)(.*)$/i);
+      const meta = item.querySelector(".meta")?.textContent?.trim() ?? "";
+      const parts = meta.match(/^(.*?)(\d+br)((?:\d+ft2)?)(.*)$/i);
       const posted = parts?.[1]?.trim() ?? "";
       const neighborhood = parts?.[4]?.trim() ?? meta;
 
@@ -128,7 +130,9 @@ defineFn("zillow-hunter", async (context, rawParams) => {
       })
     : listings;
 
-  console.log(`Found ${listings.length} listings, ${filtered.length} within ${radius} mile(s) of ${zipcode}`);
+  console.log(
+    `Found ${listings.length} listings, ${filtered.length} within ${radius} mile(s) of ${zipcode}`,
+  );
 
   // 5. Send the daily digest email via Resend
   if (filtered.length > 0 && recipient) {
@@ -136,31 +140,35 @@ defineFn("zillow-hunter", async (context, rawParams) => {
 
     const dateLabel = new Date().toLocaleDateString("en-US", {
       month: "short",
-      day:   "numeric",
+      day: "numeric",
     });
 
     await resend.emails.send({
-      from:    "Apartment Hunter <onboarding@resend.dev>",
-      to:      recipient,
+      from: "Apartment Hunter <onboarding@resend.dev>",
+      to: recipient,
       subject: `🏠 ${filtered.length} apartments near NOPA / Lower Haight — ${dateLabel}`,
-      html:    buildEmail(filtered, maxPrice, minBeds),
+      html: buildEmail(filtered, maxPrice, minBeds),
     });
 
     console.log(`Email sent to ${recipient}`);
   }
 
   return {
-    timestamp:     new Date().toISOString(),
-    url:           searchUrl,
+    timestamp: new Date().toISOString(),
+    url: searchUrl,
     listingsFound: filtered.length,
-    listings:      filtered,
-    emailSent:     filtered.length > 0 && Boolean(recipient),
+    listings: filtered,
+    emailSent: filtered.length > 0 && Boolean(recipient),
   };
 });
 
 // --- Email template ---
 
-function buildEmail(listings: Listing[], maxPrice: number, minBeds: number): string {
+function buildEmail(
+  listings: Listing[],
+  maxPrice: number,
+  minBeds: number,
+): string {
   const rows = listings
     .map(
       (l) => `
